@@ -1,6 +1,7 @@
-package transport
+package database
 
 import (
+	m "an3softbot/internal/models"
 	"context"
 	"fmt"
 
@@ -9,9 +10,15 @@ import (
 )
 
 type ClickHouseClient struct {
+	Connected  bool
+	connection *driver.Conn
 }
 
 func (cl *ClickHouseClient) Connect() (driver.Conn, error) {
+	if cl.Connected {
+		return *cl.connection, nil
+	}
+
 	var (
 		ctx       = context.Background()
 		conn, err = clickhouse.Open(&clickhouse.Options{
@@ -29,12 +36,6 @@ func (cl *ClickHouseClient) Connect() (driver.Conn, error) {
 					{Name: "an3softBot", Version: "0.1"},
 				},
 			},
-			// Debugf: func(format string, v ...interface{}) {
-			// 	fmt.Printf(format, v)
-			// },
-			// TLS: &tls.Config{
-			// 	InsecureSkipVerify: true,
-			// },
 		})
 	)
 
@@ -49,11 +50,25 @@ func (cl *ClickHouseClient) Connect() (driver.Conn, error) {
 		return nil, err
 	}
 
-	v, err := conn.ServerVersion()
-	if err != nil {
-		return nil, err
-	}
-	println(v)
+	cl.connection = &conn
+	cl.Connected = true
 
 	return conn, nil
+}
+
+func (cl *ClickHouseClient) Write(request m.Request) {
+
+	// v, err := cl.connection.ServerVersion()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// println(v)
+
+	println("Write request:")
+	println(request.UserId)
+	println(request.ChatId)
+	println(request.MessageID)
+	println(request.UserName)
+	println(request.Text)
+	println(request.Received.String())
 }
