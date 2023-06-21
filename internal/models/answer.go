@@ -1,5 +1,6 @@
 package models
 
 type Answer struct {
-	Text string
+	ChatId int64
+	Text   string
 }

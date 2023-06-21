@@ -5,6 +5,6 @@ import (
 	"context"
 )
 
-type Sender interface {
-	Send(context.Context, *m.Answer)
+type Processor interface {
+	Process(context.Context, *m.Request) m.Answer
 }

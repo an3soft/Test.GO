@@ -2,8 +2,9 @@ package contracts
 
 import (
 	m "an3softbot/internal/models"
+	"context"
 )
 
-type Writer interface {
-	Write(m.Request)
+type DBWriter interface {
+	Write(context.Context, *m.Request)
 }

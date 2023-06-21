@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type Request struct {
 	UserId    int64
@@ -10,4 +12,5 @@ type Request struct {
 	Text      string
 	Received  time.Time
 	Updated   time.Time
+	Ready     bool
 }

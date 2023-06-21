@@ -5,6 +5,7 @@ import (
 	clkhs "an3softbot/internal/database/clickhouse"
 	s "an3softbot/internal/services"
 	t "an3softbot/internal/transport"
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,7 +15,7 @@ type Application struct {
 	AppPath string
 	tgbot   *t.TelegramBot
 	worker  *s.Worker
-	writer  c.Writer
+	writer  c.DBWriter
 	wg      sync.WaitGroup
 }
 
@@ -28,38 +29,21 @@ func (app *Application) Run() {
 		panic(err)
 	}
 	app.wg.Add(2)
-	clkhs := clkhs.ClickHouseClient{}
-	_, err = clkhs.Connect()
+	ctx := context.Background()
+	// Подкобчение к БД
+	clkhs := clkhs.ClickHouseClient{ReadBufferSize: 10}
+	_, err = clkhs.Connect(ctx)
 	if err != nil {
 		panic(err)
 	}
 	app.writer = &clkhs
-	// ctx := context.Background()
-	// rows, err := conn.Query(ctx, "SELECT Id, Message FROM Requests")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// for rows.Next() {
-	// 	var (
-	// 		Id      uint64
-	// 		Message string
-	// 	)
-	// 	if err := rows.Scan(
-	// 		&Id,
-	// 		&Message,
-	// 	); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	fmt.Printf("Id: %d, Message: \"%s\"", Id, Message)
-	// }
-
 	// Создание и запуск обработчика бота
-	app.tgbot = &t.TelegramBot{TimeOut: 30, Debug: false, Wg: &app.wg, Writer: &clkhs}
-	go app.tgbot.Run()
+	app.tgbot = &t.TelegramBot{TimeOut: 60, Debug: false, Wg: &app.wg, Writer: &clkhs}
+	app.tgbot.Init()
+	go app.tgbot.Run(ctx)
 	// Создание и запуск обработчика запросов
-	app.worker = &s.Worker{TgBot: app.tgbot, Wg: &app.wg}
-	go app.worker.Run()
+	app.worker = &s.Worker{Reader: &clkhs, Writer: &clkhs, Sender: app.tgbot, Processor: &s.Processor{}, Wg: &app.wg}
+	go app.worker.Run(ctx)
 	// Ожидание
 	app.wg.Wait()
 }

@@ -4,23 +4,25 @@ import (
 	m "an3softbot/internal/models"
 	"context"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
 type ClickHouseClient struct {
-	Connected  bool
-	connection *driver.Conn
+	Connected      bool
+	connection     *driver.Conn
+	ReadBufferSize int
 }
 
-func (cl *ClickHouseClient) Connect() (driver.Conn, error) {
+func (cl *ClickHouseClient) Connect(ctx context.Context) (driver.Conn, error) {
 	if cl.Connected {
 		return *cl.connection, nil
 	}
 
 	var (
-		ctx       = context.Background()
 		conn, err = clickhouse.Open(&clickhouse.Options{
 			Addr: []string{"localhost:19000"},
 			Auth: clickhouse.Auth{
@@ -56,19 +58,93 @@ func (cl *ClickHouseClient) Connect() (driver.Conn, error) {
 	return conn, nil
 }
 
-func (cl *ClickHouseClient) Write(request m.Request) {
+func GetRow(rows driver.Rows) (*m.Request, error) {
+	if rows.Next() {
+		req := m.Request{}
+		var mId int32
+		if err := rows.Scan(
+			&req.UserId,
+			&req.ChatId,
+			&mId,
+			&req.UserName,
+			&req.Text,
+			&req.Received,
+			&req.Updated,
+			&req.Ready,
+		); err != nil {
+			return nil, err
+		}
+		req.MessageID = int(mId)
+		fmt.Printf("ChatId: %d, Message: \"%s\"\n\r", req.ChatId, req.Text)
+		return &req, nil
+	}
 
-	// v, err := cl.connection.ServerVersion()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// println(v)
+	return nil, nil
+}
 
-	println("Write request:")
-	println(request.UserId)
-	println(request.ChatId)
-	println(request.MessageID)
-	println(request.UserName)
-	println(request.Text)
-	println(request.Received.String())
+func (cl *ClickHouseClient) Write(ctx context.Context, request *m.Request) {
+
+	conn := *cl.connection
+	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests WHERE ChatId = %d AND MessageID = %d", request.ChatId, request.MessageID))
+	if err != nil {
+		log.Fatal(err)
+	}
+	req, err := GetRow(rows)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if req == nil {
+		err := conn.Exec(ctx, fmt.Sprintf("INSERT INTO Requests VALUES(%d, %d, %d, '%s', '%s', '%s', '%s', false)",
+			request.UserId,
+			request.ChatId,
+			request.MessageID,
+			request.UserName,
+			request.Text,
+			time.Now().Format("2006-01-02 15:04:05"),
+			time.Now().Format("2006-01-02 15:04:05")))
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		err := conn.Exec(ctx, fmt.Sprintf("UPDATE Requests SET Text = '%s', Received = '%s', Ready = false WHERE ChatId = %d AND MessageID = %d",
+			request.Text,
+			time.Now().Format("2006-01-02 15:04:05"),
+			request.ChatId,
+			request.MessageID))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func (cl *ClickHouseClient) Read(ctx context.Context) chan *m.Request {
+	ch := make(chan *m.Request, cl.ReadBufferSize)
+	conn := *cl.connection
+	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests WHERE Ready = %t", false))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req, err := GetRow(rows)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go func() {
+		for req != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				ch <- req
+				req, err = GetRow(rows)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+	}()
+
+	return ch
 }

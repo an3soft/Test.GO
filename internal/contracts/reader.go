@@ -5,6 +5,6 @@ import (
 	"context"
 )
 
-type Sender interface {
-	Send(context.Context, *m.Answer)
+type DBReader interface {
+	Read(context.Context) chan *m.Request
 }
