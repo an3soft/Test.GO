@@ -75,7 +75,7 @@ func GetRow(rows driver.Rows) (*m.Request, error) {
 			return nil, err
 		}
 		req.MessageID = int(mId)
-		fmt.Printf("ChatId: %d, Message: \"%s\"\n\r", req.ChatId, req.Text)
+		//fmt.Printf("ChatId: %d, Message: \"%s\"\n\r", req.ChatId, req.Text)
 		return &req, nil
 	}
 
@@ -85,7 +85,8 @@ func GetRow(rows driver.Rows) (*m.Request, error) {
 func (cl *ClickHouseClient) Write(ctx context.Context, request *m.Request) {
 
 	conn := *cl.connection
-	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests WHERE ChatId = %d AND MessageID = %d", request.ChatId, request.MessageID))
+	// Requests ENGINE = ReplacingMergeTree
+	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests FINAL WHERE ChatId = %d AND MessageID = %d", request.ChatId, request.MessageID))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,11 +108,16 @@ func (cl *ClickHouseClient) Write(ctx context.Context, request *m.Request) {
 			log.Fatal(err)
 		}
 	} else {
-		err := conn.Exec(ctx, fmt.Sprintf("UPDATE Requests SET Text = '%s', Received = '%s', Ready = false WHERE ChatId = %d AND MessageID = %d",
-			request.Text,
-			time.Now().Format("2006-01-02 15:04:05"),
+		// Requests ENGINE = ReplacingMergeTree
+		err := conn.Exec(ctx, fmt.Sprintf("INSERT INTO Requests VALUES(%d, %d, %d, '%s', '%s', '%s', '%s', %t)",
+			request.UserId,
 			request.ChatId,
-			request.MessageID))
+			request.MessageID,
+			request.UserName,
+			request.Text,
+			request.Received.Format("2006-01-02 15:04:05"),
+			time.Now().Format("2006-01-02 15:04:05"),
+			request.Ready))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -119,22 +125,23 @@ func (cl *ClickHouseClient) Write(ctx context.Context, request *m.Request) {
 }
 
 func (cl *ClickHouseClient) Read(ctx context.Context) chan *m.Request {
-	ch := make(chan *m.Request, cl.ReadBufferSize)
 	conn := *cl.connection
 	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests WHERE Ready = %t", false))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	req, err := GetRow(rows)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ch := make(chan *m.Request, cl.ReadBufferSize)
 
 	go func() {
+		req, err := GetRow(rows)
+		if err != nil {
+			log.Fatal(err)
+		}
 		for req != nil {
 			select {
 			case <-ctx.Done():
+				close(ch)
 				return
 			default:
 				ch <- req
@@ -144,6 +151,7 @@ func (cl *ClickHouseClient) Read(ctx context.Context) chan *m.Request {
 				}
 			}
 		}
+		close(ch)
 	}()
 
 	return ch

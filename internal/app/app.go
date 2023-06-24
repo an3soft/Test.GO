@@ -38,11 +38,18 @@ func (app *Application) Run() {
 	}
 	app.writer = &clkhs
 	// Создание и запуск обработчика бота
-	app.tgbot = &t.TelegramBot{TimeOut: 60, Debug: false, Wg: &app.wg, Writer: &clkhs}
+	app.tgbot = &t.TelegramBot{TimeOut: 60,
+		Debug:  false,
+		Wg:     &app.wg,
+		Writer: &clkhs}
 	app.tgbot.Init()
 	go app.tgbot.Run(ctx)
 	// Создание и запуск обработчика запросов
-	app.worker = &s.Worker{Reader: &clkhs, Writer: &clkhs, Sender: app.tgbot, Processor: &s.Processor{}, Wg: &app.wg}
+	app.worker = &s.Worker{Reader: &clkhs,
+		Writer:    &clkhs,
+		Sender:    app.tgbot,
+		Processor: &s.Processor{Writer: &clkhs},
+		Wg:        &app.wg}
 	go app.worker.Run(ctx)
 	// Ожидание
 	app.wg.Wait()

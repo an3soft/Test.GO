@@ -2,11 +2,10 @@ package services
 
 import (
 	c "an3softbot/internal/contracts"
-	"time"
-
-	//m "an3softbot/internal/models"
+	m "an3softbot/internal/models"
 	"context"
 	"sync"
+	"time"
 )
 
 type Worker struct {
@@ -21,18 +20,25 @@ func (worker *Worker) Run(ctx context.Context) {
 	defer worker.Wg.Done()
 
 	//for ; ; time.Sleep(12 * time.Hour) {
-	for ; ; time.Sleep(1 * time.Minute) {
+	for ; ; time.Sleep(5 * time.Minute) {
+		println("Worker cycle start at", time.Now().String())
 		select {
 		case <-ctx.Done():
 			return
 		default:
 			ch := worker.Reader.Read(ctx)
-			for {
+			var (
+				req *m.Request
+				ok  bool = true
+			)
+			for ok {
 				select {
-				case req := <-ch:
-					answ := worker.Processor.Process(ctx, req)
-					if answ.Text != "" {
-						worker.Sender.Send(ctx, &answ)
+				case req, ok = <-ch:
+					if ok {
+						answ := worker.Processor.Process(ctx, req)
+						if answ.Text != "" {
+							worker.Sender.Send(ctx, &answ)
+						}
 					}
 				case <-ctx.Done():
 					return
