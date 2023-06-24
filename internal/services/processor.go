@@ -21,10 +21,12 @@ func (p *Processor) Process(ctx context.Context, req *m.Request) m.Answer {
 	var ready bool = rnd.Intn(2) == 1
 	if ready {
 		ret.Text = fmt.Sprintf("Запрос обработан: <b>%s</b>", req.Text)
+		//req.Ready = true
+		//p.Writer.Write(ctx, req)	// clickhouse merge is bad, if you need update, use specific version field for select last update (or secondary table)
+		p.Writer.Delete(ctx, req) // delete work best
 	} else {
 		ret.Text = fmt.Sprintf("Запрос НЕ обработан: <b>%s</b>", req.Text)
+		//p.Writer.Write(ctx, req)	// clickhouse merge is bad
 	}
-	req.Ready = ready
-	p.Writer.Write(ctx, req)
 	return ret
 }

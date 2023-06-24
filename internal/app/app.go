@@ -31,7 +31,7 @@ func (app *Application) Run() {
 	app.wg.Add(2)
 	ctx := context.Background()
 	// Подкобчение к БД
-	clkhs := clkhs.ClickHouseClient{ReadBufferSize: 10}
+	clkhs := clkhs.ClickHouseClient{ReadBufferSize: 3}
 	_, err = clkhs.Connect(ctx)
 	if err != nil {
 		panic(err)

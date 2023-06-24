@@ -156,3 +156,24 @@ func (cl *ClickHouseClient) Read(ctx context.Context) chan *m.Request {
 
 	return ch
 }
+
+func (cl *ClickHouseClient) Delete(ctx context.Context, request *m.Request) {
+
+	conn := *cl.connection
+	// Requests ENGINE = ReplacingMergeTree
+	rows, err := conn.Query(ctx, fmt.Sprintf("SELECT * FROM Requests FINAL WHERE ChatId = %d AND MessageID = %d", request.ChatId, request.MessageID))
+	if err != nil {
+		log.Fatal(err)
+	}
+	req, err := GetRow(rows)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if req != nil {
+		err := conn.Exec(ctx, fmt.Sprintf("DELETE FROM Requests WHERE ChatId = %d AND MessageID = %d", request.ChatId, request.MessageID))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
