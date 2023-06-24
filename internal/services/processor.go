@@ -16,7 +16,7 @@ type Processor struct {
 func (p *Processor) Process(ctx context.Context, req *m.Request) m.Answer {
 	ret := m.Answer{}
 	ret.ChatId = req.ChatId
-	// Generate random process result for stub
+	// Generating a random processing result for a stub
 	rnd := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	var ready bool = rnd.Intn(2) == 1
 	if ready {
